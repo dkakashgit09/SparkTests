@@ -1,0 +1,18 @@
+spring.application.name=SparkApplication
+
+
+# MySQL database connection properties
+spring.datasource.url=jdbc:mysql://localhost:3306/akash
+spring.datasource.username=root
+spring.datasource.password=Akash@Exf#12
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+#Mongo connection properties
+spring.data.mongodb.uri=mongodb://localhost:27017/SparkMigration
+spring.data.mongodb.database=SparkMigration
+
+# Cassandra connection properties
+cassandra.host=localhost
+cassandra.port=9042
+cassandra.keyspace=my_keyspace
+

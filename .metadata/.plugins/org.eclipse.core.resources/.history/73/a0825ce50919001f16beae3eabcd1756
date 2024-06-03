@@ -1,0 +1,383 @@
+package com.sparkapp.service;
+
+import static org.apache.spark.sql.functions.lit;
+import static org.apache.spark.sql.functions.row_number;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.apache.spark.sql.Column;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SaveMode;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.functions;
+import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.expressions.WindowSpec;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+
+
+@Service
+public class SparkService 
+{
+	@Value("${spring.datasource.url}")
+	private String mysqlUrl;
+
+    @Value("${spring.datasource.username}")
+    private String mysqlUsername;
+
+    @Value("${spring.datasource.password}")
+    private String mysqlPassword;
+
+    @Value("${spring.datasource.driver-class-name}")
+    private String mysqlDriver;
+    
+    @Value("${spring.data.mongodb.uri}")
+    private String mongodbUri;
+    
+    @Value("${spring.data.mongodb.database}")
+    private String mongodbname;
+    
+    public String renameColumnInMySql()
+    {
+        try(SparkSession session = SparkSession.builder().appName("sparkTest").master("local").getOrCreate())
+        {
+        	String tableName = "annual_reports";
+//            String tempTableName = tableName + "_temp";
+
+        	Properties connectionProperties = new Properties();
+            connectionProperties.put("user", mysqlUsername);
+            connectionProperties.put("password", mysqlPassword);
+            
+        	//CSV files to DataFrame
+    		Dataset<Row> data = session.read().jdbc(mysqlUrl, tableName, connectionProperties);
+    		data.show();
+    		Dataset<Row> updatedData = data.withColumnRenamed("value", "values");
+    		updatedData.show();
+    		
+//            updatedData.write().format("jdbc").mode(SaveMode.Overwrite).option("url", mysqlUrl)
+//							.option("dbtable", tableName)
+//							.option("user", mysqlUsername)
+//							.option("password", mysqlPassword)
+//							.save();
+//            
+
+            // Define a temporary table name//
+            // Write the renamed DataFrame to a temporary table in MySQL
+//            updatedData.write()
+//                    .mode(SaveMode.Overwrite)
+//                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+//            // Read back from the temporary table (this ensures the schema is updated in MySQL)
+//            Dataset<Row> finalDF = session.read()
+//                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+//
+//            // Write the final DataFrame back to the original table, preserving the data
+//            finalDF.write()
+//                    .mode(SaveMode.Overwrite)
+//                    .jdbc(mysqlUrl, tableName, connectionProperties);
+
+            session.stop();
+            return "success";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Spark";
+        }
+        
+    }
+    
+    public String modifyDataInMySql()
+    {
+        try(SparkSession session = SparkSession.builder().appName("sparkTest").master("local").getOrCreate())
+        {
+        	String tableName = "annual_reports";
+        	Properties connectionProperties = new Properties();
+            connectionProperties.put("user", mysqlUsername);
+            connectionProperties.put("password", mysqlPassword);
+            
+        	//CSV files to DataFrame
+    		Dataset<Row> data = session.read().jdbc(mysqlUrl, tableName, connectionProperties);
+    		data.show();
+    		Dataset<Row> modifiedDF = data.withColumn("Industry_code_NZSIOC", 
+    	            functions.when(data.col("Industry_code_NZSIOC").equalTo(99999), 88888)
+    	            .otherwise(data.col("Industry_code_NZSIOC")));
+    		
+    		modifiedDF.show();
+    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
+    		modifiedDF.write().format("jdbc").mode(SaveMode.Overwrite).option("url", mysqlUrl).option("dbtable", tableName).option("user", mysqlUsername).option("password", mysqlPassword).save();
+//    		modifiedDF.write().mode(SaveMode.Overwrite).jdbc(mysqlUrl, tableName, connectionProperties);
+            // Define a temporary table name//
+            // Write the renamed DataFrame to a temporary table in MySQL
+//            updatedData.write()
+//                    .mode(SaveMode.Overwrite)
+//                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+//            // Read back from the temporary table (this ensures the schema is updated in MySQL)
+//            Dataset<Row> finalDF = session.read()
+//                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+//
+//            // Write the final DataFrame back to the original table, preserving the data
+//            finalDF.write()
+//                    .mode(SaveMode.Overwrite)
+//                    .jdbc(mysqlUrl, tableName, connectionProperties);
+            session.stop();
+            return "success";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Spark";
+        }
+        
+    }
+    public String migrateSqlToMongo()
+    {
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo").master("local").config("spark.mongodb.output.uri", mongodbUri).getOrCreate())
+    	{
+    		String tableName = "annual_reports";
+    		Dataset<Row> sqlData = session.read().format("jdbc").option("url", mysqlUrl).option("dbtable", tableName).option("user", mysqlUsername).option("password", mysqlPassword).option("driver", mysqlDriver).load();
+    		
+            Dataset<Row> mongodbData = sqlData.withColumn("_id", row_number().over(Window.orderBy(lit(1))));
+            
+            mongodbData.write().mode(SaveMode.Overwrite)
+            .format("mongo")
+            .option("uri", mongodbUri)
+            .option("database", mongodbname)
+            .option("collection", "spark_migration")
+            .save();
+            return "success";
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return "Spark";
+    	}
+    }
+    
+    public String processCsvToMongo(String csvPath)
+    {
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo").master("local").config("spark.mongodb.output.uri", mongodbUri).getOrCreate())
+    	{
+    		Dataset<Row> csvData = session.read().format("csv").option("header", true).option("inferSchema", true).csv(csvPath);
+    		csvData.printSchema();
+    		csvData = convertStringColumnsToInteger(csvData);
+
+            Dataset<Row> mongodbData = csvData.withColumn("_id", row_number().over(Window.orderBy(lit(1))));
+            mongodbData.write().mode(SaveMode.Overwrite) // Choose save mode according to your requirements
+            .format("mongo")
+            .option("uri", mongodbUri)
+            .option("database", mongodbname)
+            .option("collection", "spark_migration")
+            .save();
+            return "success";
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return "Spark";
+    	}
+    }
+    
+    public String processCsvToMongo(String csvPath, String csvPath2)
+    {
+    	//Create Spark Session and handle exceptions
+    	try(SparkSession session = SparkSession.builder().appName("sparkCSVTest").master("local").config("spark.mongodb.output.uri", mongodbUri).getOrCreate())
+    	{
+    		//CSV files to DataFrame - 1
+    		Dataset<Row> csvData = session.read().format("csv").option("header", "true").option("inferSchema", "true").csv(csvPath);
+    		csvData = addIdColumn(csvData);
+    		csvData.printSchema();
+    		csvData = convertStringColumnsToInteger(csvData);
+    		
+    		//CSV files to DataFrame - 2
+    		Dataset<Row> csvData2 = session.read().format("csv").option("header", "true").option("inferSchema", "true").csv(csvPath2);
+    		csvData2 = addIdColumn(csvData2);
+    		csvData2 = renameColumnsWithSuffix(csvData, csvData2, "_2");
+    		csvData2.printSchema();
+    		csvData2 = convertStringColumnsToInteger(csvData2);
+    		
+    		//Inner Joining DataFrame 1 and Dataframe 2 by matching id and Creating 3rd DataFrame
+            Dataset<Row> joinedDF = csvData.join(csvData2, csvData.col("id").equalTo(csvData2.col("id_2")), "inner");
+            joinedDF.show();
+            joinedDF.printSchema();
+            
+            Column[] childColumns = Arrays.stream(csvData2.columns())
+                    .map(functions::col)
+                    .toArray(Column[]::new);
+            
+            Dataset<Row> parentChildDF = joinedDF.groupBy("id")
+                    .agg(functions.collect_list(functions.struct(childColumns)).alias("children"));
+
+            
+            parentChildDF.show();
+    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
+            parentChildDF.write().mode(SaveMode.Overwrite)
+            								.format("mongo")
+    										.option("url", mysqlUrl)
+    										.option("database", mongodbUri)
+    										.option("collection", "parent_child")
+    										.save();
+            session.stop();
+            return "success";
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return "Spark";
+    	}
+
+    }
+    private static String getMySQLDataType(String sparkDataType)
+	{
+		switch (sparkDataType.toLowerCase())
+		{
+		case "string":
+            return "VARCHAR(255)";
+        case "integer":
+            return "INT";
+        case "long":
+            return "BIGINT";
+        case "double":
+            return "DOUBLE";
+        case "float":
+            return "FLOAT";
+        case "boolean":
+            return "BOOLEAN";
+        case "timestamp":
+            return "TIMESTAMP";
+        case "date":
+            return "DATE";
+        default:
+            throw new IllegalArgumentException("Unsupported Spark SQL type: " + sparkDataType);
+		}
+	}
+    
+	//Method to Add Column to the exiting DataFrame
+    private static Dataset<Row> addIdColumn(Dataset<Row> data) 
+    {
+        // Create a new column 'id' with row number as its value 
+        WindowSpec windowSpec = Window.orderBy(functions.lit(1));
+        return data.withColumn("id", functions.row_number().over(windowSpec));
+    }
+    private static String generateCreateTableColumnTypes(StructType schema) 
+    {
+        return Stream.of(schema.fields())
+                .map(field -> field.name().toUpperCase() + " " + getMySQLDataType(field.dataType().typeName()))
+                .collect(Collectors.joining(", "));
+    }
+    
+    //Converting String Values to Integer ex:- if values are like 123,456
+    private static Dataset<Row> convertStringColumnsToInteger(Dataset<Row> data) 
+    {
+        StructType schema = data.schema().add("id", "integer");
+        for (StructField field : schema.fields()) {
+            if (field.dataType() == DataTypes.StringType) {
+                // Assuming columns that are strings but contain numbers with commas need to be converted
+                String columnName = field.name();
+                boolean shouldConvert = data.select(columnName).as(Encoders.STRING()).limit(100)
+                        .collectAsList()
+                        .stream()
+                        .allMatch(value -> value == null || value.matches("^\\d{1,3}(,\\d{3})*(\\.\\d+)?$"));
+                if (shouldConvert) {
+                	data = data.withColumn(columnName,
+                            functions.regexp_replace(functions.col(columnName), ",", "").cast(DataTypes.IntegerType));
+                }
+            }
+        }
+        return data;
+    }
+    public String processCsvToMySql(String csvPath)
+    {
+    	//Create Spark Session and handle exceptions
+    	try(SparkSession session = SparkSession.builder().appName("sparkTest").master("local").getOrCreate())
+    	{
+    		//CSV files to DataFrame
+    		Dataset<Row> csvData = session.read().format("csv").option("header", "true").option("inferSchema", "true").csv(csvPath);
+    		csvData = addIdColumn(csvData);
+    		csvData.printSchema();
+    		csvData = convertStringColumnsToInteger(csvData);
+    		csvData.printSchema();
+            String createTableColumnTypes = generateCreateTableColumnTypes(csvData.schema());
+    		String tableName = "annual_reports";
+    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
+    		csvData.write().format("jdbc").mode(SaveMode.Overwrite)
+    										.option("url", mysqlUrl)
+    										.option("dbtable", tableName)
+    										.option("user", mysqlUsername)
+    										.option("password", mysqlPassword)
+    										.option("createTableColumnTypes", createTableColumnTypes)
+    										.save();
+            session.stop();
+            return "success";
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return "Spark";
+    	}
+
+    }
+    
+    //Rename Columns For Joining Two Relation Tables
+    private static Dataset<Row> renameColumnsWithSuffix(Dataset<Row> csvData, Dataset<Row> csvData2, String suffix) 
+    {
+        List<String> csvDataColumns = Arrays.asList(csvData.columns()).stream().map(String :: toLowerCase).collect(Collectors.toList());
+        System.out.println(csvDataColumns);
+        for (String colName : csvData2.columns()) {
+            if (csvDataColumns.contains(colName.toLowerCase())) {
+            	csvData2 = csvData2.withColumnRenamed(colName, colName + suffix);
+            }
+        }
+        return csvData2;
+    }
+    
+    public String processCsvToMySql(String csvPath, String csvPath2)
+    {
+    	//Create Spark Session and handle exceptions
+    	try(SparkSession session = SparkSession.builder().appName("sparkCSVTest").master("local").getOrCreate())
+    	{
+    		//CSV files to DataFrame - 1
+    		Dataset<Row> csvData = session.read().format("csv").option("header", "true").option("inferSchema", "true").csv(csvPath);
+    		csvData = addIdColumn(csvData);
+    		csvData.printSchema();
+    		csvData = convertStringColumnsToInteger(csvData);
+    		
+    		//CSV files to DataFrame - 2
+    		Dataset<Row> csvData2 = session.read().format("csv").option("header", "true").option("inferSchema", "true").csv(csvPath2);
+    		csvData2 = addIdColumn(csvData2);
+    		csvData2 = renameColumnsWithSuffix(csvData, csvData2, "_2");
+    		csvData2.printSchema();
+    		csvData2 = convertStringColumnsToInteger(csvData2);
+    		
+    		//Inner Joining DataFrame 1 and Dataframe 2 by matching id and Creating 3rd DataFrame
+            Dataset<Row> joinedDF = csvData.join(csvData2, csvData.col("id").equalTo(csvData2.col("id_2")), "inner");
+            joinedDF.show();
+            joinedDF.printSchema();
+            String createTableColumnTypes = generateCreateTableColumnTypes(joinedDF.schema());
+            System.out.println(createTableColumnTypes);
+    		String tableName = "joined_annual_reports";
+    		
+    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
+    		joinedDF.write().format("jdbc").mode(SaveMode.Overwrite)
+    										.option("url", mysqlUrl)
+    										.option("dbtable", tableName)
+    										.option("user", mysqlUsername)
+    										.option("password", mysqlPassword)
+    										.option("createTableColumnTypes", createTableColumnTypes)
+    										.save();
+            session.stop();
+            return "success";
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return "Spark";
+    	}
+
+    }
+}
