@@ -3,9 +3,14 @@ package com.sparkapp.service;
 import static org.apache.spark.sql.functions.lit;
 import static org.apache.spark.sql.functions.row_number;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -25,11 +30,12 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import com.datastax.spark.connector.cql.CassandraConnector;
 import com.mongodb.spark.MongoSpark;
-import com.mongodb.spark.config.WriteConfig;
 
 import scala.Tuple2;
 
@@ -65,142 +71,17 @@ public class SparkService
     @Value("${spring.data.cassandra.keyspace-name}")
     private String cassandraKeyspace;
     
-    private String destSqlUrl = "jdbc:mysql://localhost:3306/dkakash";
+//    private String destSqlUrl = "jdbc:mysql://localhost:3307/dkakash";
+    private String destSqlUrl = "jdbc:mysql://mysql:3306/dkakash";
+
     
-    private String destMongoUri = "mongodb://localhost:27017/MongoToMongo";
+    private String destMongoUri = "mongodb+srv://dkakash0505:AkashExf@sparktests.ommjaa8.mongodb.net/";
     private String destMongodbName = "MongoToMongo";
     	
-    public String renameColumnInMySql()
+    public ResponseEntity<?> migrateSqlToMongo()
     {
-        try(SparkSession session = SparkSession.builder().appName("colrename").master("local").getOrCreate())
-        {
-        	String tableName = "annual_reports";
-            String tempTableName = tableName + "_temp";
-
-        	Properties connectionProperties = new Properties();
-            connectionProperties.put("user", mysqlUsername);
-            connectionProperties.put("password", mysqlPassword);
-            
-        	//CSV files to DataFrame
-    		Dataset<Row> data = session.read()
-    				.jdbc(mysqlUrl, tableName, connectionProperties);
-    		data.show();
-    		Dataset<Row> updatedData = data.withColumnRenamed("value", "values");
-    		updatedData.show();
-    		
-            updatedData.write().format("jdbc")
-            .mode(SaveMode.Overwrite)
-            .option("url", mysqlUrl)
-            .option("dbtable", tableName)
-            .option("user", mysqlUsername)
-			.option("password", mysqlPassword)
-			.save();
-            
-
-            // Define a temporary table name//
-            // Write the renamed DataFrame to a temporary table in MySQL
-            updatedData.write()
-                    .mode(SaveMode.Overwrite)
-                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
-            // Read back from the temporary table (this ensures the schema is updated in MySQL)
-            Dataset<Row> finalDF = session.read()
-                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
-
-            // Write the final DataFrame back to the original table, preserving the data
-            finalDF.write()
-                    .mode(SaveMode.Overwrite)
-                    .jdbc(mysqlUrl, tableName, connectionProperties);
-
-            session.stop();
-            return "success";
-        } 
-        catch (Exception e)
-        {
-            e.printStackTrace();
-            return "Spark";
-        }
-        
-    }
-    
-    public String modifyDataInMySql()
-    {
-        try(SparkSession session = SparkSession.builder().appName("datamodification").master("local").getOrCreate())
-        {
-        	String tableName = "annual_reports";
-            String tempTableName = tableName + "_temp";
-        	Properties connectionProperties = new Properties();
-            connectionProperties.put("user", mysqlUsername);
-            connectionProperties.put("password", mysqlPassword);
-            
-        	//CSV files to DataFrame
-    		Dataset<Row> data = session.read()
-    				.jdbc(mysqlUrl, tableName, connectionProperties);
-    		data.show();
-    		
-    		Dataset<Row> modifiedDF = data.withColumn("Industry_code_NZSIOC", functions.when(data.col("Industry_code_NZSIOC").equalTo(99999), 88888).otherwise(data.col("Industry_code_NZSIOC")));
-    		
-    		modifiedDF.show();
-    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
-            // Define a temporary table name//
-            // Write the renamed DataFrame to a temporary table in MySQL
-    		modifiedDF.write()
-                    .mode(SaveMode.Overwrite)
-                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
-            // Read back from the temporary table (this ensures the schema is updated in MySQL)
-            Dataset<Row> finalDF = session.read()
-                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
-
-            // Write the final DataFrame back to the original table, preserving the data
-            finalDF.write()
-                    .mode(SaveMode.Overwrite)
-                    .jdbc(mysqlUrl, tableName, connectionProperties);
-            session.stop();
-            return "success";
-        } 
-        catch (Exception e) 
-        {
-            e.printStackTrace();
-            return "Spark";
-        }
-        
-    }
-    
-    public String modifyDataInMongo()
-    {
-    	try(SparkSession session = SparkSession.builder().appName("Modify data").master("local").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
-    	{
-    		Dataset<Row> cassandraData = session.read()
-    		        .format("org.apache.spark.sql.cassandra")
-    		        .option("keyspace", cassandraKeyspace)
-    		        .option("table", "annual_reports")
-    		        .load();
-    		cassandraData = cassandraData.orderBy("_id");
-    		cassandraData.show();
-    		
-    		Dataset<Row> updatedData = cassandraData.withColumnRenamed("value", "Values");
-    		
-    		updatedData = updatedData.withColumn("Industry_code_NZSIOC", functions.when(updatedData.col("Industry_code_NZSIOC").equalTo(99999), 88888).otherwise(updatedData.col("Industry_code_NZSIOC")));
-    		updatedData.show();
-    		updatedData.write()
-    		.mode(SaveMode.Overwrite)
-    		.format("Mongo")
-    		.option("uri", mongodbUri)
-    		.option("database", mongodbname)
-    		.option("collection", "CassandraMigration")
-    		.save();
-            session.stop();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-    }
-    
-    public String migrateSqlToMongo()
-    {
-    	try(SparkSession session = SparkSession.builder().appName("Migrate Sql to Mongo").master("local").config("spark.mongodb.output.uri", mongodbUri).getOrCreate())
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Sql to Mongo").master("local[*]").getOrCreate())
     	{
     		String tableName = "annual_reports";
     		Dataset<Row> sqlData = session.read()
@@ -212,26 +93,30 @@ public class SparkService
     				.option("driver", mysqlDriver)
     				.load();
     		
-            Dataset<Row> mongodbData = sqlData.withColumn("_id", row_number().over(Window.orderBy(lit(1))));
-            
-            mongodbData.write().mode(SaveMode.Overwrite)
+            Dataset<Row> modifiedMongoData = sqlData.withColumn("_id", row_number().over(Window.orderBy(lit(1)))).drop("id");
+            modifiedMongoData.write().mode(SaveMode.Overwrite)
             .format("mongo")
             .option("uri", mongodbUri)
             .option("database", mongodbname)
             .option("collection", "spark_migration")
             .save();
-            return "success";
+            
+    		List<Map<String, Object>> result = mapDataToList(modifiedMongoData);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
     	}
         catch(Exception e)
     	{
         	e.printStackTrace();
-        	return "Spark";
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
     	}
     }
     
-    public String migrateMongoToSql()
+    public ResponseEntity<?> migrateMongoToSql()
     {
-    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo to Sql").master("local").getOrCreate())
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo to Sql").master("local[*]").getOrCreate())
     	{
     		String tableName = "MigratedData_Mongo";
     		Dataset<Row> mongoData = session.read()
@@ -239,143 +124,33 @@ public class SparkService
                     .option("uri", mongodbUri)
                     .option("database", mongodbname)
                     .option("collection", "spark_migration")
-                    .load();
+                    .load().withColumnRenamed("_id", "id");
     		
+    		String createTableColumnTypes = generateCreateTableColumnTypes(mongoData.schema());
     		mongoData.write().format("jdbc").mode(SaveMode.Overwrite)
 			.option("url", mysqlUrl)
 			.option("dbtable", tableName)
 			.option("user", mysqlUsername)
 			.option("password", mysqlPassword)
+			.option("createTableColumnTypes", createTableColumnTypes)
 			.save();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-    }
-    
-    public String migrateCassandraToMongo()
-    {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("Csv to Cassandra").master("local").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
-    	{
-    		Dataset<Row> cassandraData = session.read()
-    		        .format("org.apache.spark.sql.cassandra")
-    		        .option("keyspace", cassandraKeyspace)
-    		        .option("table", "annual_reports")
-    		        .load();
-    		cassandraData.show();
-    		
-    		cassandraData = cassandraData.orderBy("_id");
-    		
-    		cassandraData.show();
-    		cassandraData.write()
-    		.mode(SaveMode.Overwrite)
-    		.format("Mongo")
-    		.option("uri", mongodbUri)
-    		.option("database", mongodbname)
-    		.option("collection", "CassandraMigration")
-    		.save();
+
+            List<Map<String, Object>> result = mapDataToList(mongoData);
             session.stop();
-            return "success";
+    		logExecutionTime(startTime);
+    		return new ResponseEntity<>(result, HttpStatus.OK);
     	}
         catch(Exception e)
     	{
         	e.printStackTrace();
-        	return "Spark";
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
     	}
     }
     
-    private String generateCreateTableCql(String keyspace, String table, StructType schema)
+    public ResponseEntity<?> migrateMongoToMongo()
     {
-        StringBuilder sb = new StringBuilder();
-        sb.append("(");
-
-        for (StructField field : schema.fields()) 
-        {
-            sb.append("\"").append(field.name()).append("\" ")
-              .append(getCassandraType(field.dataType())).append(", ");
-        }
-
-        sb.append("PRIMARY KEY (")
-          .append("\"").append("_id").append("\"")
-          .append("))");
-
-        return sb.toString();
-    }
-
-    private String getCassandraType(DataType dataType) 
-    {
-        // Map Spark SQL data types to Cassandra data types
-        if (dataType instanceof org.apache.spark.sql.types.StringType) 
-        {
-            return "text";
-        } 
-        else if (dataType instanceof org.apache.spark.sql.types.IntegerType) 
-        {
-            return "int";
-        } 
-        else if (dataType instanceof org.apache.spark.sql.types.DoubleType) 
-        {
-            return "double";
-        } 
-        else if (dataType instanceof org.apache.spark.sql.types.DateType) 
-        {
-            return "date";
-        } 
-        else 
-        {
-            // Handle other data types as needed
-            return "text";
-        }
-    }
-    
-    public String migrateMongoToCassandra()
-    {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("Csv to Cassandra").master("local").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
-    	{
-    		Dataset<Row> mongoData = session.read()
-                    .format("mongo")
-                    .option("uri", mongodbUri)
-                    .option("database", mongodbname)
-                    .option("collection", "spark_migration")
-                    .load();
-    		
-    		mongoData.printSchema();
-    		mongoData.show();
-    		
-    		
-    		StructType schema = mongoData.schema();
-            String createTableCql = generateCreateTableCql(cassandraKeyspace, "annual_reports", schema);
-            CassandraConnector.apply(session.sparkContext()).withSessionDo(sessions ->
-                    sessions.execute("CREATE TABLE IF NOT EXISTS " + cassandraKeyspace + ".annual_reports " + createTableCql));
-            
-            
-            mongoData.write()
-            .format("org.apache.spark.sql.cassandra")
-            .option("keyspace", cassandraKeyspace)
-            .option("table", "annual_reports")
-            .option("batch_size", "1000")
-            .mode(SaveMode.Overwrite)
-            .option("confirm.truncate", "true")
-            .option("spark.cassandra.output.consistency.level", "ONE")
-            .save();
-            session.stop();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-    }
-    
-    public String migrateMongoToMongo()
-    {
-    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo to Mongo").master("local").getOrCreate())
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Mongo to Mongo").master("local[*]").getOrCreate())
     	{
     		Dataset<Row> mongoData = session.read()
                     .format("mongo")
@@ -390,25 +165,24 @@ public class SparkService
 			.option("database", destMongodbName)
 			.option("collection", "mongotomongo")
 			.save();
-            return "success";
+            List<Map<String, Object>> result = mapDataToList(mongoData);
+            session.stop();
+    		logExecutionTime(startTime);
+    		return new ResponseEntity<>(result, HttpStatus.OK);
     	}
         catch(Exception e)
     	{
         	e.printStackTrace();
-        	return "Spark";
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
     	}
     }
     
-    public String processCsvToMongo(String csvPath)
+    public ResponseEntity<?> processCsvToMongo(String csvPath)
     {
-    	try(SparkSession session = SparkSession.builder().appName("Process CSV to Mongo").master("local").config("spark.mongodb.output.uri", mongodbUri).getOrCreate())
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Process CSV to Mongo").master("local[*]").getOrCreate())
     	{
-    		Dataset<Row> csvData = session.read()
-    				.format("csv")
-    				.option("header", true)
-    				.option("inferSchema", true)
-    				.csv(csvPath);
-    		
+    		Dataset<Row> csvData = loadCsv(session, csvPath);
     		csvData.printSchema();
     		csvData = convertStringColumnsToInteger(csvData);
 
@@ -417,40 +191,34 @@ public class SparkService
             .format("mongo")
             .option("uri", mongodbUri)
             .option("database", mongodbname)
-            .option("collection", "spark_migration")
+            .option("collection", "csv_data")
             .save();
-            return "success";
+            
+            List<Map<String, Object>> result = mapDataToList(mongodbData);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
     	}
         catch(Exception e)
     	{
         	e.printStackTrace();
-        	return "Spark";
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
     	}
     }
     
-	public String processCsvToMongo(String csvPath, String csvPath2)
+    public ResponseEntity<?> processCsvToMongo(String csvPath, String csvPath2)
     {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("Process 2 Csv Files to Mongo").master("local").config("spark.mongodb.output.uri", mongodbUri).config("spark.mongodb.output.database", mongodbname).config("spark.mongodb.output.collection", "parent_child_relation").getOrCreate())
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Process 2 Csv Files to Mongo").master("local[*]").config("spark.mongodb.output.uri", mongodbUri).config("spark.mongodb.output.database", mongodbname).config("spark.mongodb.output.collection", "parent_child_relation").getOrCreate())
     	{
     		//CSV files to DataFrame - 1
-    		Dataset<Row> csvData = session.read()
-    				.format("csv")
-    				.option("header", "true")
-    				.option("inferSchema", "true")
-    				.csv(csvPath);
-    		
+    		Dataset<Row> csvData = loadCsv(session, csvPath);
     		csvData = addIdColumn(csvData);
     		csvData.printSchema();
     		csvData = convertStringColumnsToInteger(csvData);
     		
     		//CSV files to DataFrame - 2
-    		Dataset<Row> csvData2 = session.read()
-    				.format("csv")
-    				.option("header", "true")
-    				.option("inferSchema", "true")
-    				.csv(csvPath2);
-    		
+    		Dataset<Row> csvData2 = loadCsv(session, csvPath2);
     		csvData2 = addIdColumn(csvData2);
     		csvData2 = renameColumnsWithSuffix(csvData, csvData2, "_2");
     		csvData2.printSchema();
@@ -492,26 +260,416 @@ public class SparkService
                 return parentDoc;
             });
 
-            // Print the contents of the final RDD to debug
-            List<Document> finalList = finalRDD.collect();
-            for (Document doc : finalList) 
-            {
-                System.out.println(doc.toJson());
-            }
+            MongoSpark.save(finalRDD);
             
-            WriteConfig writeConfig = WriteConfig.create(session)
-            		.withOption("database", mongodbname)
-            		.withOption("collection", "parent_child_relation");
-            MongoSpark.save(finalRDD, writeConfig);
+            List<Map<String, Object>> result = finalRDD.collect().stream().map(row -> {
+				Map<String, Object> map = new HashMap<>();
+				for (String field : row.keySet()) 
+				{
+					map.put(field, row.get(field));
+				}
+				return map;
+			}).collect(Collectors.toList());
             session.stop();
-            return "success";
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
     	}
         catch(Exception e)
     	{
         	e.printStackTrace();
-        	return "Spark";
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
     	}
 
+    }
+    
+    public ResponseEntity<?> processCsvToMySql(String csvPath)
+    {
+        long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Csv to Sql").master("local[*]").getOrCreate())
+    	{
+    		//CSV files to DataFrame
+    		Dataset<Row> csvData = loadCsv(session, csvPath);
+    		csvData = addIdColumn(csvData);
+    		csvData = convertStringColumnsToInteger(csvData);    		
+            String createTableColumnTypes = generateCreateTableColumnTypes(csvData.schema());
+    		String tableName = "annual_reports";
+    		
+    		csvData.write()
+    		.format("jdbc")
+    		.mode(SaveMode.Overwrite)
+    		.option("url", mysqlUrl)
+    		.option("dbtable", tableName)
+    		.option("user", mysqlUsername)
+    		.option("password", mysqlPassword)
+    		.option("createTableColumnTypes", createTableColumnTypes)
+    		.save();
+    		
+            List<Map<String, Object>> result = mapDataToList(csvData);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);  	
+        }
+    }
+    
+    public ResponseEntity<?> processCsvToMySql(String csvPath, String csvPath2)
+    {
+    	long startTime = System.currentTimeMillis(); 
+    	try(SparkSession session = SparkSession.builder().appName("2 Csv Files to Sql").master("local[*]").getOrCreate())
+    	{
+    		//CSV files to DataFrame - 1
+    		Dataset<Row> csvData = loadCsv(session, csvPath);
+    		csvData = addIdColumn(csvData);
+    		csvData.printSchema();
+    		csvData = convertStringColumnsToInteger(csvData);
+    		
+    		//CSV files to DataFrame - 2
+    		Dataset<Row> csvData2 = loadCsv(session, csvPath2);
+    		csvData2 = addIdColumn(csvData2);
+    		csvData2 = renameColumnsWithSuffix(csvData, csvData2, "_2");
+    		csvData2.printSchema();
+    		csvData2 = convertStringColumnsToInteger(csvData2);
+    		
+            Dataset<Row> joinedDF = csvData.join(csvData2, csvData.col("id").equalTo(csvData2.col("id_2")), "inner");
+            String createTableColumnTypes = generateCreateTableColumnTypes(joinedDF.schema());
+    		String tableName = "joined_annual_reports";
+    		
+    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
+    		joinedDF.write()
+    		.format("jdbc")
+    		.mode(SaveMode.Overwrite).option("url", mysqlUrl)
+    		.option("dbtable", tableName)
+    		.option("user", mysqlUsername)
+    		.option("password", mysqlPassword)
+    		.option("createTableColumnTypes", createTableColumnTypes)
+    		.save();
+    		
+    	    List<Map<String, Object>> result = mapDataToList(joinedDF);
+    	    session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
+    	}
+    }
+    
+    public ResponseEntity<?> migrateMongoToCassandra()
+    {
+    	long startTime = System.currentTimeMillis();
+//    	try(SparkSession session = SparkSession.builder().appName("Mongo to Cassandra").master("local[*]").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	try(SparkSession session = SparkSession.builder().appName("Mongo to Cassandra").master("local[*]").config("spark.cassandra.connection.host", "cassandra").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	{
+    		Dataset<Row> mongoData = session.read()
+                    .format("mongo")
+                    .option("uri", mongodbUri)
+                    .option("database", mongodbname)
+                    .option("collection", "spark_migration")
+                    .load();
+
+    		StructType schema = mongoData.schema();
+            String createTableCql = generateCreateTableCql(cassandraKeyspace, "annual_reports", schema);
+            CassandraConnector.apply(session.sparkContext()).withSessionDo(sessions ->
+                    sessions.execute("CREATE TABLE IF NOT EXISTS " + cassandraKeyspace + ".annual_reports " + createTableCql));
+            
+            
+            mongoData.write()
+            .format("org.apache.spark.sql.cassandra")
+            .option("keyspace", cassandraKeyspace)
+            .option("table", "annual_reports")
+            .option("batch_size", "1000")
+            .mode(SaveMode.Overwrite)
+            .option("confirm.truncate", "true")
+            .option("spark.cassandra.output.consistency.level", "ONE")
+            .save();
+    		List<Map<String, Object>> result = mapDataToList(mongoData);
+            session.stop();
+    		logExecutionTime(startTime);
+    		return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+        	return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
+    	}
+    }
+    
+    public ResponseEntity<?> migrateCassandraToMongo()
+    {
+    	long startTime = System.currentTimeMillis();
+//    	try(SparkSession session = SparkSession.builder().appName("Cassandra to Mongo").master("local[*]").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	try(SparkSession session = SparkSession.builder().appName("Cassandra to Mongo").master("local[*]").config("spark.cassandra.connection.host", "cassandra").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	{
+    		Dataset<Row> cassandraData = session.read()
+    		        .format("org.apache.spark.sql.cassandra")
+    		        .option("keyspace", cassandraKeyspace)
+    		        .option("table", "annual_reports")
+    		        .load()
+    		        .orderBy("_id");
+
+    		cassandraData.write()
+    		.mode(SaveMode.Overwrite)
+    		.format("Mongo")
+    		.option("uri", mongodbUri)
+    		.option("database", mongodbname)
+    		.option("collection", "CassandraMigration")
+    		.save();
+    		
+            List<Map<String, Object>> result = mapDataToList(cassandraData);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+            return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
+    	}
+    }
+    
+    public ResponseEntity<?> renameColumnInMySql()
+    {
+    	long startTime = System.currentTimeMillis();
+        try(SparkSession session = SparkSession.builder().appName("colrename").master("local[*]").getOrCreate())
+        {
+        	String tableName = "annual_reports";
+            String tempTableName = tableName + "_temp";
+
+        	Properties connectionProperties = new Properties();
+            connectionProperties.put("user", mysqlUsername);
+            connectionProperties.put("password", mysqlPassword);
+            
+    		Dataset<Row> data = session.read().jdbc(mysqlUrl, tableName, connectionProperties);
+    		data.show();
+    		Dataset<Row> updatedData = data.withColumnRenamed("value", "values");
+    		updatedData.show();
+    		
+            // Write the renamed DataFrame to a temporary table in MySQL
+            updatedData.write()
+                    .mode(SaveMode.Overwrite)
+                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+            // Read back from the temporary table (this ensures the schema is updated in MySQL)
+            Dataset<Row> finalDF = session.read()
+                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+
+            // Write the final DataFrame back to the original table, preserving the data
+            finalDF.write()
+                    .mode(SaveMode.Overwrite)
+                    .jdbc(mysqlUrl, tableName, connectionProperties);
+
+            List<Map<String, Object>> result = mapDataToList(finalDF);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+        } 
+        catch (Exception e)
+        {
+            e.printStackTrace();
+            return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
+        }
+    }
+    
+    public ResponseEntity<?> modifyDataInMySql()
+    {
+    	long startTime = System.currentTimeMillis();
+        try(SparkSession session = SparkSession.builder().appName("datamodification").master("local[*]").getOrCreate())
+        {
+        	String tableName = "annual_reports";
+            String tempTableName = tableName + "_temp";
+            
+        	Properties connectionProperties = new Properties();
+            connectionProperties.put("user", mysqlUsername);
+            connectionProperties.put("password", mysqlPassword);
+            
+    		Dataset<Row> data = session.read().jdbc(mysqlUrl, tableName, connectionProperties);
+    		data.show();
+    		Dataset<Row> modifiedDF = data.withColumn("Industry_code_NZSIOC", functions.when(data.col("Industry_code_NZSIOC").equalTo(99999), 88888).otherwise(data.col("Industry_code_NZSIOC")));
+    		
+    		modifiedDF.show();
+    		modifiedDF.write()
+                    .mode(SaveMode.Overwrite)
+                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+            // Read back from the temporary table (this ensures the schema is updated in MySQL)
+            Dataset<Row> finalDF = session.read()
+                    .jdbc(mysqlUrl, tempTableName, connectionProperties);
+
+            // Write the final DataFrame back to the original table, preserving the data
+            finalDF.write()
+                    .mode(SaveMode.Overwrite)
+                    .jdbc(mysqlUrl, tableName, connectionProperties);
+            
+            List<Map<String, Object>> result = mapDataToList(finalDF);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+        } 
+        catch (Exception e) 
+        {
+            e.printStackTrace();
+            return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);
+        }
+        
+    }
+    
+    public ResponseEntity<?> modifyDataInMongo()
+    {
+    	long startTime = System.currentTimeMillis();
+//    	try(SparkSession session = SparkSession.builder().appName("Modify data").master("local[*]").config("spark.cassandra.connection.host", "localhost").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	try(SparkSession session = SparkSession.builder().appName("Modify data").master("local[*]").config("spark.cassandra.connection.host", "cassandra").config("spark.cassandra.connection.port", "9042").getOrCreate())
+    	{
+    		Dataset<Row> cassandraData = session.read()
+    		        .format("org.apache.spark.sql.cassandra")
+    		        .option("keyspace", cassandraKeyspace)
+    		        .option("table", "annual_reports")
+    		        .load();
+    		cassandraData = cassandraData.orderBy("_id");
+    		
+    		Dataset<Row> updatedData = cassandraData.withColumnRenamed("value", "Values");
+    		updatedData = updatedData.withColumn("Industry_code_NZSIOC", functions.when(updatedData.col("Industry_code_NZSIOC").equalTo(99999), 88888).otherwise(updatedData.col("Industry_code_NZSIOC")));
+    		updatedData.show();
+    		updatedData.write()
+    		.mode(SaveMode.Overwrite)
+    		.format("Mongo")
+    		.option("uri", mongodbUri)
+    		.option("database", mongodbname)
+    		.option("collection", "ModifiedData")
+    		.save();
+            List<Map<String, Object>> result = mapDataToList(updatedData);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+            return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);    	
+        }
+    }
+    
+    public ResponseEntity<?> migrateSqlToSql()
+    {
+    	long startTime = System.currentTimeMillis();
+    	try(SparkSession session = SparkSession.builder().appName("Migrate Sql to Sql").master("local[*]").getOrCreate())
+    	{
+    		String tableName = "annual_reports";
+    		Dataset<Row> data = session.read()
+                    .format("jdbc")
+                    .option("url", mysqlUrl)
+                    .option("dbtable", tableName)
+                    .option("user", mysqlUsername)
+                    .option("password", mysqlPassword)
+                    .load();
+    		System.out.println("!1");
+            try (Connection connection = DriverManager.getConnection("jdbc:mysql://mysql:3306/", mysqlUsername, mysqlPassword)) 
+    		{
+                System.out.println("Connection to MySQL established.");
+    			Statement st = connection.createStatement();
+        		System.out.println("!1");
+    	        st.executeUpdate("CREATE DATABASE IF NOT EXISTS dkakash");
+        		System.out.println("!3");
+    		}
+    		catch(Exception e)
+    		{
+            	e.printStackTrace();
+                return new ResponseEntity<>("Exception in Sql", HttpStatus.BAD_REQUEST);    
+    		}
+    		System.out.println("!4");
+
+    		data.write().format("jdbc").mode(SaveMode.Overwrite)
+                    .option("url", destSqlUrl)
+                    .option("dbtable", "migrated"+tableName)
+                    .option("user", mysqlUsername)
+                    .option("password", mysqlPassword)
+                    .save();
+    		System.out.println("!5");
+            List<Map<String, Object>> result = mapDataToList(data);
+            session.stop();
+    		logExecutionTime(startTime);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+    	}
+        catch(Exception e)
+    	{
+        	e.printStackTrace();
+            return new ResponseEntity<>("Exception in Application", HttpStatus.BAD_REQUEST);    	
+    	}
+
+    }
+    
+    private void logExecutionTime(long startTime) 
+    {
+        long endTime = System.currentTimeMillis();
+        long duration = (endTime - startTime) / 1000; // Convert to seconds
+        System.out.println("Execution time in seconds: " + duration);
+    }
+    
+    private List<Map<String, Object>> mapDataToList(Dataset<Row> mongoData) 
+    {
+        return mongoData.collectAsList().stream()
+                .map(row -> {
+                    Map<String, Object> map = new HashMap<>();
+                    for (String field : row.schema().fieldNames()) {
+                        map.put(field, row.getAs(field));
+                    }
+                    return map;
+                }).collect(Collectors.toList());
+    }
+    
+    private Dataset<Row> loadCsv(SparkSession session, String csvPath) 
+    {
+        return session.read()
+                .format("csv")
+                .option("header", "true")
+                .option("inferSchema", "true")
+                .csv(csvPath);
+    }
+   
+    private String generateCreateTableCql(String keyspace, String table, StructType schema)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(");
+
+        for (StructField field : schema.fields()) 
+        {
+            sb.append("\"").append(field.name()).append("\" ")
+              .append(getCassandraType(field.dataType())).append(", ");
+        }
+
+        sb.append("PRIMARY KEY (")
+          .append("\"").append("_id").append("\"")
+          .append("))");
+
+        return sb.toString();
+    }
+
+    private String getCassandraType(DataType dataType) 
+    {
+        // Map Spark SQL data types to Cassandra data types
+        if (dataType instanceof org.apache.spark.sql.types.StringType) 
+        {
+            return "text";
+        } 
+        else if (dataType instanceof org.apache.spark.sql.types.IntegerType) 
+        {
+            return "int";
+        } 
+        else if (dataType instanceof org.apache.spark.sql.types.DoubleType) 
+        {
+            return "double";
+        } 
+        else if (dataType instanceof org.apache.spark.sql.types.DateType) 
+        {
+            return "date";
+        } 
+        else 
+        {
+            return "text";
+        }
     }
 	
     private static String getMySQLDataType(String sparkDataType)
@@ -576,78 +734,6 @@ public class SparkService
         }
         return data;
     }
-    
-    public String migrateSqlToSql()
-    {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("Migrate Sql to Sql").master("local").getOrCreate())
-    	{
-    		String tableName = "annual_reports";
-    		Dataset<Row> data = session.read()
-                    .format("jdbc")
-                    .option("url", mysqlUrl)
-                    .option("dbtable", tableName)
-                    .option("user", mysqlUsername)
-                    .option("password", mysqlPassword)
-                    .load();
-    		
-    		data.write().format("jdbc").mode(SaveMode.Overwrite)
-                    .option("url", destSqlUrl)
-                    .option("dbtable", tableName)
-                    .option("user", mysqlUsername)
-                    .option("password", mysqlPassword)
-                    .save();
-            session.stop();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-
-    }
-    
-    public String processCsvToMySql(String csvPath)
-    {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("Csv to Sql").master("local").getOrCreate())
-    	{
-    		//CSV files to DataFrame
-    		Dataset<Row> csvData = session.read()
-    				.format("csv")
-    				.option("header", "true")
-    				.option("inferSchema", "true")
-    				.csv(csvPath);
-    		
-    		csvData = addIdColumn(csvData);
-    		csvData.printSchema();
-    		csvData = convertStringColumnsToInteger(csvData);
-    		csvData.printSchema();
-    		
-            String createTableColumnTypes = generateCreateTableColumnTypes(csvData.schema());
-    		String tableName = "annual_reports";
-    		
-    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
-    		csvData.write()
-    		.format("jdbc")
-    		.mode(SaveMode.Overwrite)
-    		.option("url", mysqlUrl)
-    		.option("dbtable", tableName)
-    		.option("user", mysqlUsername)
-    		.option("password", mysqlPassword)
-    		.option("createTableColumnTypes", createTableColumnTypes)
-    		.save();
-            session.stop();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-
-    }
        
     //Rename Columns For Joining Two Relation Tables
     private static Dataset<Row> renameColumnsWithSuffix(Dataset<Row> csvData, Dataset<Row> csvData2, String suffix) 
@@ -664,59 +750,4 @@ public class SparkService
         return csvData2;
     }
     
-    public String processCsvToMySql(String csvPath, String csvPath2)
-    {
-    	//Create Spark Session and handle exceptions
-    	try(SparkSession session = SparkSession.builder().appName("2 Csv Files to Sql").master("local").getOrCreate())
-    	{
-    		//CSV files to DataFrame - 1
-    		Dataset<Row> csvData = session.read()
-    				.format("csv")
-    				.option("header", "true")
-    				.option("inferSchema", "true")
-    				.csv(csvPath);
-    		
-    		csvData = addIdColumn(csvData);
-    		csvData.printSchema();
-    		csvData = convertStringColumnsToInteger(csvData);
-    		
-    		//CSV files to DataFrame - 2
-    		Dataset<Row> csvData2 = session.read()
-    				.format("csv")
-    				.option("header", "true")
-    				.option("inferSchema", "true")
-    				.csv(csvPath2);
-    		
-    		csvData2 = addIdColumn(csvData2);
-    		csvData2 = renameColumnsWithSuffix(csvData, csvData2, "_2");
-    		csvData2.printSchema();
-    		csvData2 = convertStringColumnsToInteger(csvData2);
-    		
-    		//Inner Joining DataFrame 1 and Dataframe 2 by matching id and Creating 3rd DataFrame
-            Dataset<Row> joinedDF = csvData.join(csvData2, csvData.col("id").equalTo(csvData2.col("id_2")), "inner");
-            joinedDF.show();
-            joinedDF.printSchema();
-            String createTableColumnTypes = generateCreateTableColumnTypes(joinedDF.schema());
-            System.out.println(createTableColumnTypes);
-    		String tableName = "joined_annual_reports";
-    		
-    		//Storing Final DataFrame into MySQL by mentioning the Format, mySql Connection properties, tablename and savemode to save in particular mode
-    		joinedDF.write()
-    		.format("jdbc")
-    		.mode(SaveMode.Overwrite).option("url", mysqlUrl)
-    		.option("dbtable", tableName)
-    		.option("user", mysqlUsername)
-    		.option("password", mysqlPassword)
-    		.option("createTableColumnTypes", createTableColumnTypes)
-    		.save();
-            session.stop();
-            return "success";
-    	}
-        catch(Exception e)
-    	{
-        	e.printStackTrace();
-        	return "Spark";
-    	}
-
-    }
 }

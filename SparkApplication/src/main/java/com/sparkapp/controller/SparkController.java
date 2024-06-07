@@ -1,8 +1,17 @@
 package com.sparkapp.controller;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sparkapp.service.SparkService;
@@ -15,193 +24,137 @@ public class SparkController
     private SparkService sparkService;
 	
 	
-	//Migrate SQL Data to Mongo DB
 	@PostMapping("/migratesqltomongo")
-	public String migrateSqlToMongo() 
+	public ResponseEntity<?> migrateSqlToMongo() 
 	{
-
-		String res = sparkService.migrateSqlToMongo();
-		if(res== "Spark")
-		{
-			return "Error while migrating data SQL to MONGO";
-		}
-		else
-		{
-			return "Migrating Sql to Mongo is successful";
-		}
+		return sparkService.migrateSqlToMongo();
 	}
 	
 	@PostMapping("/migratemongotosql")
-	public String migrateMongoToSql() 
+	public ResponseEntity<?> migrateMongoToSql() 	
 	{
-
-		String res = sparkService.migrateMongoToSql();
-		if(res== "Spark")
-		{
-			return "Error while migrating data MONGO to SQL";
-		}
-		else
-		{
-			return "Migrating MONGO to SQL is successful";
-		}
+		return sparkService.migrateMongoToSql();
 	}
-	
 	
 	@PostMapping("/migratemongotomongo")
-	public String migrateMongoToMongo()
+	public ResponseEntity<?> migrateMongoToMongo()
 	{
-		String res = sparkService.migrateMongoToMongo();
-		if(res== "Spark")
-		{
-			return "Error while migrating Mongo to Mongo";
-		}
-		else
-		{
-			return "Mongo to Mongo Migration is Successful";
-		}
+		return sparkService.migrateMongoToMongo();
 	}
-	//Read CSV File and store it in MONGO DB
+
 	@PostMapping("/processcsvtomongo")
-	public String sparkThroughCsvToMongo(@RequestParam("csvFilePath") String csvFilePath) 
+	public ResponseEntity<?> sparkThroughCsvToMongo() 
 	{
-
-		String res = sparkService.processCsvToMongo(csvFilePath);
-		if(res== "Spark")
+		try 
 		{
-			return "Error while storing data CSV to MONGO";
-		}
-		else
+			String filePath = copyResourceToTempFile("annual-csv.csv");
+			return sparkService.processCsvToMongo(filePath);
+		} 
+		catch (IOException e) 
 		{
-			return "Csv data stored to Mongo DB";
+			e.printStackTrace();
+			return new ResponseEntity<>("File Reading Error: " + e.getMessage(), HttpStatus.BAD_REQUEST);
 		}
 	}
-	
-	
+
 	@PostMapping("/processcsvfilestomongo")
-	public String sparkThroughCsvToMongo(@RequestParam("csvFilePath") String csvFilePath, @RequestParam("csvFilePath2") String csvFilePath2) 
+	public ResponseEntity<?> sparkThroughCsvFilesToMongo() 
 	{
-
-		String res = sparkService.processCsvToMongo(csvFilePath, csvFilePath2);
-		if(res== "Spark")
+		try 
 		{
-			return "Error while storing CSV DATA";
-		}
-		else
+			String filePath = copyResourceToTempFile("annual-csv.csv");
+			String filePath2 = copyResourceToTempFile("annual-csv-join.csv");
+			return sparkService.processCsvToMongo(filePath, filePath2);
+		} 
+		catch (IOException e) 
 		{
-			return "CSV data stored to MySQL";
+			e.printStackTrace();
+			return new ResponseEntity<>("File Reading Error: " + e.getMessage(), HttpStatus.BAD_REQUEST);
 		}
 	}
 	
-	//Read CSV File and store it in my SQL
 	@PostMapping("/processcsvtosql")
-	public String sparkThroughCsvToMySql(@RequestParam("csvFilePath") String csvFilePath) 
+	public ResponseEntity<?> sparkThroughCsvToMySql() 
 	{
-
-		String res = sparkService.processCsvToMySql(csvFilePath);
-		if(res== "Spark")
+		try 
 		{
-			return "Error while storing data CSV DATA";
-		}
-		else
+			String filePath = copyResourceToTempFile("annual-csv.csv");
+			return sparkService.processCsvToMySql(filePath);
+		} 
+		catch (IOException e) 
 		{
-			return "CSV data stored to MySQL";
+			e.printStackTrace();
+			return new ResponseEntity<>("File Reading Error: " + e.getMessage(), HttpStatus.BAD_REQUEST);
 		}
 	}
 	
-	//Read Two CSV Files join as one table and store it in my SQL
 	@PostMapping("/processcsvfilestosql")
-	public String sparkThroughCsvToMySql(@RequestParam("csvFilePath") String csvFilePath, @RequestParam("csvFilePath2") String csvFilePath2) 
+	public ResponseEntity<?> sparkThroughCsvFilesToMySql() 
 	{
-
-		String res = sparkService.processCsvToMySql(csvFilePath, csvFilePath2);
-		if(res== "Spark")
+		try 
 		{
-			return "Error while storing CSV DATA";
-		}
-		else
+			String filePath = copyResourceToTempFile("annual-csv.csv");
+			String filePath2 = copyResourceToTempFile("annual-csv-join.csv");
+			return sparkService.processCsvToMySql(filePath, filePath2);
+		} 
+		catch (IOException e) 
 		{
-			return "CSV data stored to MySQL";
+			e.printStackTrace();
+			return new ResponseEntity<>("File Reading Error: " + e.getMessage(), HttpStatus.BAD_REQUEST);
 		}
 	}
 	
-	//Read Two CSV Files join as one table and store it in my SQL
 	@PostMapping("/migratemongotocassandra")
-	public String sparkThroughMongoToCassandra() 
+	public ResponseEntity<?> sparkThroughMongoToCassandra() 
 	{
-
-		String res = sparkService.migrateMongoToCassandra();
-		if(res== "Spark")
-		{
-			return "Error while migrating mongo to cassandra";
-		}
-		else
-		{
-			return "Mongo data migrated to Cassandra";
-		}
+		return sparkService.migrateMongoToCassandra();
 	}
 	
 	@PostMapping("/migratecassandratomongo")
-	public String sparkThroughCassandraToMongo() 
+	public ResponseEntity<?> sparkThroughCassandraToMongo() 
 	{
-
-		String res = sparkService.migrateCassandraToMongo();
-		if(res== "Spark")
-		{
-			return "Error while migrating cassandra to mongo";
-		}
-		else
-		{
-			return "Cassandra data migrated to Mongo";
-		}
+		return sparkService.migrateCassandraToMongo();
 	}
 	
-	@PostMapping("/modifysql")
-	public String modifyDataSql() 
+	@PostMapping("/modifydatasql")
+	public ResponseEntity<?> modifyDataSql() 
 	{
-
-//		String res = sparkService.renameColumnInMySql();
-		String res = sparkService.modifyDataInMySql();
-		if(res== "Spark" || res== "SQL")
-		{
-			return "Error while Modifying data";
-		}
-		else
-		{
-			return "Modified data stored to MySQL";
-		}
+		return sparkService.modifyDataInMySql();
 	}
 	
+	@PostMapping("/modifycolsql")
+	public ResponseEntity<?> modifyColumnSql() 
+	{
+		return sparkService.renameColumnInMySql();
+	}
 	
 	@PostMapping("/modifyTomongo")
-	public String modifyDataMongo() 
+	public ResponseEntity<?> modifyDataMongo() 
 	{
+		return sparkService.modifyDataInMongo();
 
-		String res = sparkService.modifyDataInMongo();
-		if(res== "Spark" || res== "SQL")
-		{
-			return "Error while Modifying data";
-		}
-		else
-		{
-			return "Modified data stored to MongoDB";
-		}
 	}
 	
 	@PostMapping("/db2db")
-	public String migrateSqlToSql() 
+	public ResponseEntity<?> migrateSqlToSql() 
 	{
-
-		String res = sparkService.migrateSqlToSql();
-		if(res== "Spark" || res== "SQL")
-		{
-			return "Error while migrating SQL to SQL";
-		}
-		else
-		{
-			return "SQL Source data stored to Destination Source SQL ";
-		}
+		return sparkService.migrateSqlToSql();
 	}
 	
-	
-	
+	private String copyResourceToTempFile(String resourcePath) throws IOException 
+	{
+        Resource resource = new ClassPathResource(resourcePath);
+        InputStream inputStream = resource.getInputStream();
+        File tempFile = File.createTempFile(resourcePath, ".csv");
+
+        try (OutputStream outputStream = new FileOutputStream(tempFile)) {
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+        }
+        
+        return tempFile.getAbsolutePath();
+    }
 }

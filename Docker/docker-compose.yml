@@ -1,0 +1,92 @@
+version: "3"
+services:
+
+  sparkbackend:
+    image: dkakash/sparkapplication:latest
+    ports:
+      - 8080:8080
+    networks:
+      - myNetwork
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/akash
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=Akash@Exf#12
+      - SPRING_DATASOURCE_DRIVER-CLASS-NAME=com.mysql.cj.jdbc.Driver
+      - SPRING_DATA_MONGODB_URI=mongodb+srv://dkakash0505:AkashExf@sparktests.ommjaa8.mongodb.net/
+      - SPRING_DATA_MONGODB_DATABASE=SparkMigration
+      - SPRING_DATA_CASSANDRA_KEYSPACE-NAME=dkkeyspace
+      - SPRING_DATA_CASSANDRA_CONTACT-POINTS=cassandra
+      - SPRING_DATA_CASSANDRA_PORT=9042
+    depends_on:
+      - mysql
+      - cassandra
+
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: Akash@Exf#12
+      MYSQL_DATABASE: akash
+    ports:
+      - "3307:3306"
+    networks:
+      - myNetwork
+    volumes:
+      - mysql-data:/var/lib/mysql
+      
+  cassandra:
+    image: cassandra:latest
+    container_name: my-cassandra-container
+    ports:
+      - 9042:9042
+      - 7199:7199
+    environment:
+      - CASSANDRA_CLUSTER_NAME=MyCluster
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    volumes:
+      - ./cassandra_data:/var/lib/cassandra
+    networks:
+      - myNetwork
+
+networks:
+  myNetwork:
+    driver: bridge
+
+volumes:
+  mysql-data:
+
+
+# version: "3"
+# services:
+#   mysql:
+#     image: mysql:8
+#     environment:
+#       MYSQL_ROOT_PASSWORD: Akash@Exf#12
+#       MYSQL_DATABASE: akash
+#     ports:
+#       - "3307:3306"  # Change port mapping here
+#     networks:
+#       - myNetwork
+#     volumes:
+#       - mysql-data:/var/lib/mysql
+      
+#   cassandra:
+#     image: cassandra:latest
+#     container_name: my-cassandra-container
+#     ports:
+#       - 9042:9042
+#       - 7199:7199
+#     environment:
+#       - CASSANDRA_CLUSTER_NAME=MyCluster
+#       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+#     volumes:
+#       - ./cassandra_data:/var/lib/cassandra
+#     networks:
+#       - myNetwork
+
+# networks:
+#   myNetwork:
+#     driver: bridge
+
+# volumes:
+#   mysql-data:
+

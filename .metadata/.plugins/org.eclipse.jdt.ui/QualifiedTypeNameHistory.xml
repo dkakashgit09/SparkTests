@@ -6,7 +6,6 @@
     <fullyQualifiedTypeName name="org.apache.spark.network.protocol.Encoders"/>
     <fullyQualifiedTypeName name="org.apache.spark.api.java.function.MapFunction"/>
     <fullyQualifiedTypeName name="java.lang.Integer"/>
-    <fullyQualifiedTypeName name="java.lang.System"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.types.StructField"/>
     <fullyQualifiedTypeName name="org.springframework.stereotype.Service"/>
     <fullyQualifiedTypeName name="com.fasterxml.jackson.databind.annotation.JsonAppend.Prop"/>
@@ -18,7 +17,6 @@
     <fullyQualifiedTypeName name="com.mongodb.client.MongoClient"/>
     <fullyQualifiedTypeName name="com.mongodb.client.MongoClients"/>
     <fullyQualifiedTypeName name="org.bson.Document"/>
-    <fullyQualifiedTypeName name="com.google.protobuf.Option"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.functions"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.Encoders"/>
     <fullyQualifiedTypeName name="java.sql.Statement"/>
@@ -26,7 +24,6 @@
     <fullyQualifiedTypeName name="org.apache.spark.SparkContext"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.hive.HiveContext"/>
     <fullyQualifiedTypeName name="com.mysql.cj.xdevapi.RowFactory"/>
-    <fullyQualifiedTypeName name="org.apache.spark.sql.RowFactory"/>
     <fullyQualifiedTypeName name="java.lang.ClassValue"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.expressions.WindowSpec"/>
     <fullyQualifiedTypeName name="org.apache.commons.lang3.StringUtils"/>
@@ -43,8 +40,19 @@
     <fullyQualifiedTypeName name="org.apache.spark.sql.types.TimestampType"/>
     <fullyQualifiedTypeName name="com.mongodb.internal.connection.Cluster"/>
     <fullyQualifiedTypeName name="com.datastax.oss.driver.api.core.session.Session"/>
-    <fullyQualifiedTypeName name="java.util.HashMap"/>
-    <fullyQualifiedTypeName name="java.util.Map"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.types.DataType"/>
     <fullyQualifiedTypeName name="org.apache.spark.sql.SaveMode"/>
+    <fullyQualifiedTypeName name="java.util.HashMap"/>
+    <fullyQualifiedTypeName name="java.util.Map"/>
+    <fullyQualifiedTypeName name="org.apache.spark.sql.types.DecimalType"/>
+    <fullyQualifiedTypeName name="org.springframework.core.io.Resource"/>
+    <fullyQualifiedTypeName name="org.springframework.core.io.ClassPathResource"/>
+    <fullyQualifiedTypeName name="org.apache.spark.sql.RowFactory"/>
+    <fullyQualifiedTypeName name="com.google.protobuf.Option"/>
+    <fullyQualifiedTypeName name="org.apache.spark.sql.catalyst.encoders.RowEncoder"/>
+    <fullyQualifiedTypeName name="scala.collection.Seq"/>
+    <fullyQualifiedTypeName name="org.springframework.http.HttpStatus"/>
+    <fullyQualifiedTypeName name="org.json4s.scalap.scalasig.SymbolInfoSymbol"/>
+    <fullyQualifiedTypeName name="java.lang.System"/>
+    <fullyQualifiedTypeName name="org.springframework.http.ResponseEntity"/>
 </qualifiedTypeNameHistroy>
